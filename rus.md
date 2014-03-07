@@ -220,6 +220,7 @@ VNC клиента. Пользователи используют форму п�
         });
     }
 
+
  [1]: img/yeoman-vnc-angular.png
  [2]: http://angularjs.org/
  [3]: http://yeoman.io/
