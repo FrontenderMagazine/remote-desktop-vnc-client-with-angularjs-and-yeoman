@@ -167,7 +167,8 @@ VNC клиента. Пользователи используют форму п�
     function addEventHandlers(r, socket) {
 
         var initialized = false,
-            screenWidth, screenHeight;
+            screenWidth,
+            screenHeight;
 
         function handleConnection(width, height) {
             screenWidth = width;
@@ -221,8 +222,230 @@ VNC клиента. Пользователи используют форму п�
     }
 
 Давайте взглянем на обработчик события `raw`. Он играет очень вважную роль в
-инициализации соединения. Когда возникает событие `raw` в первый раз -  значение
-переменной
+инициализации соединения. Когда возникает событие `raw` в первый раз -  значение переменной равно false, дефолтное значение булевых переменных
+(смотри [Ленивые вычисления(Lazy declaration)[14]), `!initialized` будет `true`, поэтому произойдет вызов функции `handleConnection`. Функция 
+`handleConnection` сообщает клиенту на AngularJS, что мы подключены к VNC серверу. Она также добавляет клиента в массив `clients` и меняет значение переменной `initialized` на true, таким образом, когда мы в следующий раз получим новый кадр, функция `handleConnection` не вызовется.
+
+Другими словаим `!initialized && handleConnection(rect.width, rect.height);` это сокращение от: 
+
+    if (!initialized) {
+        handleConnection(rect.width, rect.height);
+    }
+
+Давайте рассмотрим следующий метод нашей прокси,  `encodeFrame`:
+
+    function encodeFrame(rect) {
+        var rgb = new Buffer(rect.width * rect.height * 3, 'binary'),
+            
+
+    offset = 0;  
+        
+        for (var i = 0; i < rect.fb.length; i += 4) {
+            rgb[offset++] = rect.fb[i + 2];
+            rgb[offset++] = rect.fb[i + 1];
+            rgb[offset++] = rect.fb[i];
+        }
+        var image = new Png(rgb, rect.width, rect.height, 'rgb');
+        
+        return image.encodeSync();
+    }
+
+Не забудьте подключить модуль `node-png`:
+
+     var Png = require('../node_modules/png/build/Release/png').Png;
+
+Все что делает фунция `encodeFrame` - это перестраивает входящие пиксели и конвертирует их в PNG. Обработчик событий `raw` конвертирует результат работы функции `encodeFrame` из бинарных данных в base64, для клиента на AngularJS.  
+
+И последний метод в прокси `disconnectClient`:
+
+    function disconnectClient(socket) {
+      clients.forEach(function (client) {
+        if (client.socket === socket) {
+          client.rfb.end();
+          clearInterval(client.interval);
+        }
+      });
+      clients = clients.filter(function (client) {
+        return client.socket === socket;
+      });
+    }
+
+Как можно понять из названия функции, она отключает клиентов. Метод вызывает сокет. Во первых, он находит клиентов, которые соответсвуют этом сокету, завершает RFB соединение и удаляет его из массива `clients`.
+
+Итак у нас есть готовый прокси-сервер. Давайте продолжим с самой веселой частью на `AngularJS` и `Yeoman`).
+
+**VNC клиент на `AngularJS` и `Yeoman`**
+
+Вначале вам нужено установить Yeoman, если он еще не установлен на вашем компьютере.
+
+    # Устанавливаем Yeoman
+    npm install -g yeoman
+    # Устанавливаем AngularJS-генератор для Yeoman
+    npm install -g generator-angular
+
+Now we can begin! Inside the directory angular-vnc create a directory called client:
+Теперь можно начинать. Внутри директории `angular-vnc` создайте папку 
+`client`.
+
+    cd angular-vnc
+    mkdir client
+    cd client
+    # создаем новое приложение на AngularJS
+    yo angular
+
+Yeoman задаст вам несколько вопросов, на которые вы должны ответить:
+
+![Yeoman AngularJS VNC configuration][15]
+
+Мы будем пользоваться бутстрапом и angular-route.js. Подождите несколько секунд и все зависимости будут разрешены и установлены. 
+
+Посмотрите на файл `app/scripts/app.js`, его содержимое должно быть примерно таким:
+
+    'use strict';
+     
+    angular.module('angApp', [
+      'ngRoute'
+    ])
+    .config(function ($routeProvider) {
+        $routeProvider
+          .when('/', {
+            templateUrl: 'views/main.html',
+            controller: 'MainCtrl'
+          })
+          .otherwise({
+            redirectTo: '/'
+          });
+    });
+
+Теперь в папке `client` запустим следующую команду:
+
+    yo angular:route vnc
+
+После завершения выполнения команды, содержимое `app/scripts/app.js` должно волшебным образом измениться:
+
+    'use strict';
+
+    angular.module('angApp', [
+      'ngRoute'
+    ])
+    .config(function ($routeProvider) {
+        $routeProvider
+          .when('/', {
+            templateUrl: 'views/main.html',
+            controller: 'MainCtrl'
+          })
+          .when('/vnc', {
+            templateUrl: 'views/vnc.html',
+            controller: 'VncCtrl'
+          })
+          .otherwise({
+            redirectTo: '/'
+          });
+    });
+
+Следущим шагом, заменим содержимое `app/views/main.html` на:
+
+    <div class="container">
+
+      <div class="row" style="margin-top:20px">
+          <div class="col-xs-12 col-sm-8 col-md-6 col-sm-offset-2 col-md-offset-3">
+          <form role="form" name="vnc-form" novalidate>
+            <fieldset>
+              <h2>VNC Login</h2>
+              <hr class="colorgraph">
+              <div class="form-error" ng-bind="errorMessage"></div>
+              <div class="form-group">
+                  <input type="text" name="hostname" id="hostname-input" class="form-control input-lg" placeholder="Hostname" ng-model="host.hostname" required ng-minlength="3">
+              </div>
+              <div class="form-group">
+                  <input type="number" min="1" max="65535" name="port" id="port-input" class="form-control input-lg" placeholder="Port" ng-model="host.port" required>
+              </div>
+              <div class="form-group">
+                  <input type="password" name="password" id="password-input" class="form-control input-lg" placeholder="Password" ng-model="host.password">
+              </div>
+              <div class="form-group">
+                  <a href="" class="btn btn-lg btn-primary btn-block" ng-click="login()">Login</a>
+              </div>
+              <hr class="colorgraph">
+            </fieldset>
+          </form>
+        </div>
+      </div>
+
+    </div>
+
+Добавьте несколько css правил в `app/styles/main.css`:
+
+    .colorgraph {
+      margin-bottom: 7px;
+      height: 5px;
+      border-top: 0;
+      background: #c4e17f;
+      border-radius: 5px;
+      background-image: -webkit-linear-gradient(left, #c4e17f, #c4e17f 12.5%, #f7fdca 12.5%, #f7fdca 25%, #fecf71 25%, #fecf71 37.5%, #f0776c 37.5%, #f0776c 50%, #db9dbe 50%, #db9dbe 62.5%, #c49cde 62.5%, #c49cde 75%, #669ae1 75%, #669ae1 87.5%, #62c2e4 87.5%, #62c2e4);
+      background-image: -moz-linear-gradient(left, #c4e17f, #c4e17f 12.5%, #f7fdca 12.5%, #f7fdca 25%, #fecf71 25%, #fecf71 37.5%, #f0776c 37.5%, #f0776c 50%, #db9dbe 50%, #db9dbe 62.5%, #c49cde 62.5%, #c49cde 75%, #669ae1 75%, #669ae1 87.5%, #62c2e4 87.5%, #62c2e4);
+      background-image: -o-linear-gradient(left, #c4e17f, #c4e17f 12.5%, #f7fdca 12.5%, #f7fdca 25%, #fecf71 25%, #fecf71 37.5%, #f0776c 37.5%, #f0776c 50%, #db9dbe 50%, #db9dbe 62.5%, #c49cde 62.5%, #c49cde 75%, #669ae1 75%, #669ae1 87.5%, #62c2e4 87.5%, #62c2e4);
+      background-image: linear-gradient(to right, #c4e17f, #c4e17f 12.5%, #f7fdca 12.5%, #f7fdca 25%, #fecf71 25%, #fecf71 37.5%, #f0776c 37.5%, #f0776c 50%, #db9dbe 50%, #db9dbe 62.5%, #c49cde 62.5%, #c49cde 75%, #669ae1 75%, #669ae1 87.5%, #62c2e4 87.5%, #62c2e4);
+    }
+
+    form.ng-invalid.ng-dirty input.ng-invalid {
+      border-color: #ff0000 !important;
+    }
+
+    .form-error {
+      width: 100%;
+      height: 25px;
+      color: red;
+      text-align: center;
+    }
+
+Они задают простую разметку и стили для простенькой формы на бутстрапе.
+После запуска вашего прокси-сервера:
+
+    cd ../proxy
+    node index.js
+
+откройте адрес `http://localhost:8090`, и вы увидите следующее: 
+
+![VNC Login Form][16]
+
+Самое удивительное, что у нас уже есть валидация для формы. Вы заметили, что мы создали  селкектор `form.ng-invalid.ng-dirty input.ng-invalid`? AngularJS достаточно умен, чтобы валидировать поля в нашей форме, зная их тип (например input type="number", для порта) и их атрибуты (`required`, `ng-minlength` - обязательное поле, минимальная длина поля). Когда AngularJS обнаруживает, что какое-то поле навалидно - он добавляет класс `ng-invalid` этому полю, он также добавляет этот класс и ко всей форме, в которой расположено данное поле. Мы просто воспользовались функциональностью, поедоставляемой  AngularJSи определили несколько стилей: ]form.ng-invalid.ng-dirty input.ng-invalid]. Если вы все еще не поняли как работает валидация, проверьте [Form Validation in NG-Tutorial][17].
+
+Мы подключили контрллер к нашему вью(спасибо yeoman), теперь нам осталось только изменить его поведение.
+
+Замените содержимое контроллера `app/scripts/controllers/main.js` на следующий кусок кода:
+
+    'use strict';
+    
+    angular.module('clientApp')
+      .controller('MainCtrl',
+      function ($scope, $location, VNCClient) {
+        
+        $scope.host = {};
+        $scope.host.proxyUrl = $location.protocol() + '://' + 
+        $location.host() + ':' + $location.port();
+        
+        $scope.login = function () {
+            var form = $scope['vnc-form'];
+            if (form.$invalid) {
+                form.$setDirty();
+            } else {
+                VNCClient.connect($scope.host)
+                .then(function () {
+                 $location.path('/vnc')
+                }, function () {
+                    $scope.errorMessage = 'Connection timeout. Please, try again.';
+                });
+            }
+        };
+    
+    });
+
+Наиболее интересная часть главного контроллера - это метод `login`. В нем, мы вначале проверяем валидна ли форма (form.$invalid), если она невалидна, то мы "загрязняем ее". Мы делаем это для того, чтобы убрать класс `ng-pristine` с формы и принудительно перевалидировать ее. Это необходимо в случае, если пользователь не введет ничего и нажмет кнопку `Login`. Если  форма валидна, мы вызываем подключение к  VNC клиенту. Как вы видите, данная фунцкия возвращает промис, при резолве которого мы редиректим на страницу  
+`http://localhost:8090/#/vnc`, а при ошибке мы показываем пользователю сообщение `Connection timeout. Please, try again.` (посмотрите в html-разметке `<div class="form-error" ng-bind="errorMessage"></div>`).
+
+
+
 
  [1]: img/yeoman-vnc-angular.png
  [2]: http://angularjs.org/
