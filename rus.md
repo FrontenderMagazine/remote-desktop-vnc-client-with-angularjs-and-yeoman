@@ -706,237 +706,235 @@ Yeoman задаст вам несколько вопросов, на котор�
     };
     angular.module('clientApp').directive('vncScreen', VNCScreenDirective);
 
-Основное показано в функции `link`, которую мы рассмотрим позднее. Давайте быстро просмотрим остальные директивы.
-Шаблон нашей директы это простой канвас с классом vnc-screen о ндолжен заместиь остальные директивы.
-Мы определяем, что пользователь нашей  vnc-screen директивы должен использовать этот элемент.
-Также важно отметить, что мы имеем одну зависимость - VNCCLIent сервис, который мы описали выше
+Отрисовка кадра на канвасе реализована в функции `link`, которую мы рассмотрим немного попозже. А пока быстро просмотрим остальные свойства данной директивы. Шаблоном для нашей директы является канвас, у которого выставлен класс `vnc-screen`, он должен подставиться вместо директивы.
+Также важно отметить наличие зависимости от VNCCLIent модуля, который мы описали выше.
 
-Давайте посмотрим на функцию link :
+Давайте посмотрим на функцию `link`:
 
-        if (!VNCClient.connected) {
-          angular.element('<span>No VNC connection.</span>').insertAfter(element);
-          element.hide();
-          return;
-        }
-         
-        function frameCallback(buffer, screen) {
-          return function (frame) {
+    if (!VNCClient.connected) {
+        angular.element('<span>No VNC connection.</span>')
+               .insertAfter(element);
+        element.hide();
+        return;
+    }
+    
+    function frameCallback(buffer, screen) {
+        return function (frame) {
             buffer.drawRect(frame);
             screen.redraw();
-          };
-        }
-         
-        function createHiddenCanvas(width, height) {
-          var canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          canvas.style.position = 'absolute';
-          canvas.style.top = -height + 'px';
-          canvas.style.left = -width + 'px';
-          canvas.style.visibility = 'hidden';
-          document.body.appendChild(canvas);
-          return canvas;
-        }
-         
-        var bufferCanvas = createHiddenCanvas(VNCClient.screenWidth, VNCClient.screenHeight),
-            buffer = new VNCClientScreen(bufferCanvas),
-            screen = new Screen(element[0], buffer),
-            callback = frameCallback(buffer, screen);
-         
-        VNCClient.addFrameCallback(callback);
-        screen.addKeyboardHandlers(VNCClient.sendKeyboardEvent.bind(VNCClient));
-        screen.addMouseHandler(VNCClient.sendMouseEvent.bind(VNCClient));
-         
-        scope.$on('$destroy', function () {
-          VNCClient.removeFrameCallback(callback);
-          bufferCanvas.remove();
-        });
+        };
+    }
+     
+    function createHiddenCanvas(width, height) {
+        var canvas = document.createElement('canvas');
+    
+        canvas.width = width;
+        canvas.height = height;
+        canvas.style.position = 'absolute';
+        canvas.style.top = -height + 'px';
+        canvas.style.left = -width + 'px';
+        canvas.style.visibility = 'hidden';
+        document.body.appendChild(canvas);
+     
+        return canvas;
+    }
+     
+      var bufferCanvas = createHiddenCanvas(VNCClient.screenWidth, VNCClient.screenHeight),
+          buffer = new VNCClientScreen(bufferCanvas),
+          screen = new Screen(element[0], buffer),
+          callback = frameCallback(buffer, screen);
+     
+      VNCClient.addFrameCallback(callback);
+      screen.addKeyboardHandlers(VNCClient.sendKeyboardEvent.bind(VNCClient));
+      screen.addMouseHandler(VNCClient.sendMouseEvent.bind(VNCClient));
+      
+      scope.$on('$destroy', function () {
+        VNCClient.removeFrameCallback(callback);
+        bufferCanvas.remove();
+      });
 
-На первом шаге фция линк проверяет подключен ли клиент, если нет - э та директива просто добавляет текст - нет внс соединения в щаблон, в действительности - 
-в дом элемент. Здесь можно добавить больше кода - добавить возможность свойство пожклчения и выполнять разные действия в зависимости от его значения 
-Это сделает нашу директиву более динамичной. Но для простоты - давайте пока оставим текущую реализацию.
+На первом шаге функция `link` проверяет подключен ли клиент, если нет - она просто добавляет текст - "No VNC connection" и прячет дом-элемент (наш шаблон). Можно улучшить данный код - добавить свойсто `connected` и выполнять разные действия по мере изменения его значения.  Это сделает нашу директиву более динамичной. Но для простоты - давайте пока оставим текущую реализацию.
 
-СТрока var bufferCanvas = createHiddenCanvas(VNCClient.screenWidth, VNCClient.screenHeight) создаст новый скрытый канвас. Он способен 
-захватывать текущее состояние удаленного экрана в размере таком как есть экран. так если экран удаоенного моитора 1024x768px
-скрытый канвас также будет шириной 1024 и высотой 768px.  Мы создаем новый экземпляр VNClclientscreen с параметрами скрытого канваса. 
-Конструктор VNClclientscreen оборачивает канвас и предоставляет следующие методы для его управления.
+СТрока `var bufferCanvas = createHiddenCanvas(VNCClient.screenWidth, VNCClient.screenHeight)` создаст скрытый canvas. Его размеры соответсвуют размерам удаленного экрана. Так, если экран удаленного моитора 1024x768px
+скрытый канвас будет отрисован с шириной 1024 и высотой 768px. Мы создаем новый экземпляр объекта VNClclientscreen и передаем ему параметры скрытого канваса. 
+Конструктор VNClclientscreen оборачивает канвас и предоставляет следующие методы для его отрисовки.
 
     function VNCClientScreen(canvas) {
-      this.canvas = canvas;
-      this.context = canvas.getContext('2d');
-      this.onUpdateCbs = [];
+        this.canvas = canvas;
+        this.context = canvas.getContext('2d');
+        this.onUpdateCbs = [];
     }
      
     VNCClientScreen.prototype.drawRect = function (rect) {
-      var img = new Image(),
-          self = this;
-      img.width = rect.width;
-      img.height = rect.height;
-      img.src = 'data:image/png;base64,' + rect.image;
-      img.onload = function () {
-        self.context.drawImage(this, rect.x, rect.y, rect.width, rect.height);
-        self.onUpdateCbs.forEach(function (cb) {
-          cb();
-        });
-      };
+        var img = new Image(),
+            self = this;
+        img.width = rect.width;
+        img.height = rect.height;
+        img.src = 'data:image/png;base64,' + rect.image;
+        img.onload = function () {
+            self.context.drawImage(this, rect.x, rect.y, rect.width, rect.height);
+            self.onUpdateCbs.forEach(function (cb) {
+                cb();
+            });
+        };
     };
      
     VNCClientScreen.prototype.getCanvas = function () {
-      return this.canvas;
+        return this.canvas;
     };
 
-На следующем шаге мы создаем экземпляр обхекта Screen. Это последгяя компонента на которую мы взглянем в данном туториале, но прежде рассмотрим  как это использовать
+На следующем шаге мы создаем экземпляр объекта Screen. Это последняя компонента на которую мы взглянем в данном туториале, но прежде рассмотрим  как его использовать. Каждый полученный кадр будем отрисовывать  поверх `VNC screen`(оболочки для скрытого канваса). Делать мы это будем потому, что `VNC screen` можно отресайзить(т.е. выставить размер, отличный от разрешения экрана на удаленной машине), мы будем отрисовывать каждый новый фрейм с учетом коэффициента масштабирования.
 
-(!!!)
-For each received frame we are going to draw the buffer canvas over the VNC screen. We do this because the VNC screen could be scaled (i.e. with size different from the one of the remote machine’s screen) and we simplify our work by using this approach. Otherwise, we should calculate the relative position of each received frame before drawing it onto the canvas, taking in account the scale factor.
+В функции `frameCallback` мы отрисовываем полученный прямоугольник(часть экрана с изменениями) на bufferCanvas-е и после этого отрисовываем bufferCanvas поверх Screen.
 
-Мы создадим экземпляр Screen передавая ему видимый канвас и внс буффер(обертка для скрытого канваса) и после этого отрисуем буфферный скрин поверх скрин экземпляра
-
-В функции link мы вызываем эти методы
+В функции `link` мы вызываем  методы:
 
     addKeyboardHandlers
     addMouseHandler
 
-Они просто делегируют обработку мыши и нажатий клавиш событий внсклиенту. ВОт реализация метода  addKeyboardHandlers
+Они просто делегируют обработку  событий мыши и нажатий клавиш `VNCClient`. Реализация метода `addKeyboardHandlers`.
 
     Screen.prototype.addKeyboardHandlers = function (cb) {
-      document.addEventListener('keydown', this.keyDownHandler(cb), false);
-      document.addEventListener('keyup', this.keyUpHandler(cb), false);
+        document.addEventListener('keydown', this.keyDownHandler(cb), false);
+        document.addEventListener('keyup', this.keyUpHandler(cb), false);
     };
      
     Screen.prototype.keyUpHandler = function (cb) {
-      return this.keyUpHandler = function (e) {
-        cb.call(null, e.keyCode, e.shiftKey, 1);
-        e.preventDefault();
-      };
+        return this.keyUpHandler = function (e) {
+            cb.call(null, e.keyCode, e.shiftKey, 1);
+            e.preventDefault();
+        };
     };
      
     Screen.prototype.keyDownHandler = function (cb) {
-      return this.keyDownHandler = function (e) {
-        cb.call(null, e.keyCode, e.shiftKey, 0);
-        e.preventDefault();
-      };
+        return this.keyDownHandler = function (e) {
+            cb.call(null, e.keyCode, e.shiftKey, 0);
+            e.preventDefault();
+        };
     };
 
+Теперь вы видите, почему мы используем `VNCClient.sendKeyboardEvent.bind(VNCClient)` -  при нажатии/отпускании клавиши мы вызваем коллбеки с null контекстом. ЧТобы обойти это, мы принудительно привязываем контекст к `Vncclient`.
 
-теперь вы видите почему мы используем VNCClient.sendKeyboardEvent.bind(VNCClient). потому что при нжатии отпускаа клавиши мы вызваем коллбеки с нулевым контектсов
-Поэтому мы принудительно привязываем контекст к Vncclientю
-
-Мы закончили! Мы пропустили несколько методов скрин, потому что я думаю их  рассмотрение неважно для данного туториала
-В любом случае здесь приведены полная имплементация Конструктора Screen
+Мы закончили! Мы пропустили несколько методов объекта `Screen`, их  рассмотрение неважно для данного туториала. 
+В любом случае здесь приведены полная имплементация `Screen`:
 
     function Screen(canvas, buffer) {
-      var bufferCanvas = buffer.getCanvas();
-      this.originalWidth = bufferCanvas.width;
-      this.originalHeight = bufferCanvas.height;
-      this.buffer = buffer;
-      this.canvas = canvas;
-      this.context = canvas.getContext('2d');
-      this.resize(bufferCanvas);
+        var bufferCanvas = buffer.getCanvas();
+        this.originalWidth = bufferCanvas.width;
+        this.originalHeight = bufferCanvas.height;
+        this.buffer = buffer;
+        this.canvas = canvas;
+        this.context = canvas.getContext('2d');
+        this.resize(bufferCanvas);
     }
      
     Screen.prototype.resize = function () {
-      var canvas = this.buffer.getCanvas(),
-          ratio = canvas.width / canvas.height,
-          parent = this.canvas.parentNode,
-          width = parent.offsetWidth,
-          height = parent.offsetHeight;
-      this.canvas.width = width;
-      this.canvas.height = width / ratio;
-      if (this.canvas.height > height) {
-        this.canvas.height = height;
-        this.canvas.width = height * ratio;
-      }
-      this.redraw();
+        var canvas = this.buffer.getCanvas(),
+            ratio = canvas.width / canvas.height,
+            parent = this.canvas.parentNode,
+            width = parent.offsetWidth,
+            height = parent.offsetHeight;
+        this.canvas.width = width;
+        this.canvas.height = width / ratio;
+        
+        if (this.canvas.height > height) {
+            this.canvas.height = height;
+            this.canvas.width = height * ratio;
+        }
+        this.redraw();
     };
      
     Screen.prototype.addMouseHandler = function (cb) {
-      var buttonsState = [0, 0, 0],
-          self = this;
+         var buttonsState = [0, 0, 0],
+             self = this;
      
-      function getMask() {
-        var copy = Array.prototype.slice.call(buttonsState),
-            buttons = copy.reverse().join('');
+        function getMask() {
+            var copy = Array.prototype.slice.call(buttonsState),
+                buttons = copy.reverse().join('');
+        
         return parseInt(buttons, 2);
       }
      
       function getMousePosition(x, y) {
-        var c = self.canvas,
-            oc = self.buffer.getCanvas(),
-            pos = c.getBoundingClientRect(),
-            width = c.width,
-            height = c.height,
-            oWidth = oc.width,
-            oHeight = oc.height,
-            widthRatio = width / oWidth,
-            heightRatio = height / oHeight;
+          var c = self.canvas,
+              oc = self.buffer.getCanvas(),
+              pos = c.getBoundingClientRect(),
+              width = c.width,
+              height = c.height,
+              oWidth = oc.width,
+              oHeight = oc.height,
+              widthRatio = width / oWidth,
+              heightRatio = height / oHeight;
+        
         return {
-          x: x / widthRatio - pos.left,
-          y: y / heightRatio - pos.top
+            x: x / widthRatio - pos.left,
+            y: y / heightRatio - pos.top
         };
       }
      
       this.canvas.addEventListener('mousedown', function (e) {
-        if (e.button === 0 || e.button === 2) {
-          buttonsState[e.button] = 1;
+          if (e.button === 0 || e.button === 2) {
+              buttonsState[e.button] = 1;
+          
           var pos = getMousePosition(e.pageX, e.pageY);
           cb.call(null, pos.x, pos.y, getMask());
         }
         e.preventDefault();
       }, false);
       this.canvas.addEventListener('mouseup', function (e) {
-        if (e.button === 0 || e.button === 2) {
-          buttonsState[e.button] = 0;
+          if (e.button === 0 || e.button === 2) {
+              buttonsState[e.button] = 0;
+         
           var pos = getMousePosition(e.pageX, e.pageY);
           cb.call(null, pos.x, pos.y, getMask());
         }
         e.preventDefault();
       }, false);
       this.canvas.addEventListener('contextmenu', function (e) {
-        e.preventDefault();
-        return false;
+          e.preventDefault();
+          return false;
       });
       this.canvas.addEventListener('mousemove', function (e) {
-        var pos = getMousePosition(e.pageX, e.pageY);
-        cb.call(null, pos.x, pos.y, getMask());
-        e.preventDefault();
+          var pos = getMousePosition(e.pageX, e.pageY);
+          cb.call(null, pos.x, pos.y, getMask());
+          e.preventDefault();
       }, false);
     };
      
     Screen.prototype.addKeyboardHandlers = function (cb) {
-      document.addEventListener('keydown', this.keyDownHandler(cb), false);
-      document.addEventListener('keyup', this.keyUpHandler(cb), false);
+        document.addEventListener('keydown', this.keyDownHandler(cb), false);
+        document.addEventListener('keyup', this.keyUpHandler(cb), false);
     };
      
     Screen.prototype.keyUpHandler = function (cb) {
-      return this.keyUpHandler = function (e) {
-        cb.call(null, e.keyCode, e.shiftKey, 1);
-        e.preventDefault();
+        return this.keyUpHandler = function (e) {
+            cb.call(null, e.keyCode, e.shiftKey, 1);
+            e.preventDefault();
       };
     };
      
     Screen.prototype.keyDownHandler = function (cb) {
-      return this.keyDownHandler = function (e) {
-        cb.call(null, e.keyCode, e.shiftKey, 0);
-        e.preventDefault();
-      };
+        return this.keyDownHandler = function (e) {
+            cb.call(null, e.keyCode, e.shiftKey, 0);
+            e.preventDefault();
+        };
     };
      
     Screen.prototype.redraw = function () {
-      var canvas = this.buffer.getCanvas();
-      this.context.drawImage(canvas, 0, 0, this.canvas.width, this.canvas.height);
+        var canvas = this.buffer.getCanvas();
+        this.context.drawImage(canvas, 0, 0, this.canvas.width, this.canvas.height);
     };
      
     Screen.prototype.destroy = function () {
-      document.removeEventListener('keydown', this.keyDownHandler);
-      document.removeEventListener('keyup', this.keyUpHandler);
-      this.canvas.removeEventListener('contextmenu');
-      this.canvas.removeEventListener('mousemove');
-      this.canvas.removeEventListener('mousedown');
-      this.canvas.removeEventListener('mouseup');
+        document.removeEventListener('keydown', this.keyDownHandler);
+        document.removeEventListener('keyup', this.keyUpHandler);
+        this.canvas.removeEventListener('contextmenu');
+        this.canvas.removeEventListener('mousemove');
+        this.canvas.removeEventListener('mousedown');
+        this.canvas.removeEventListener('mouseup');
     };
 
-Последний шаг - это запустить внс клиент. Убедитесь что на вашем компьютере установлен VNC сервер и запустите его
+Последний шаг - это запустить VNC клиент. Убедитесь, что на вашем компьютере установлен VNC сервер и запустите его.
 
 Наберите следующие команды:
 
@@ -944,7 +942,7 @@ For each received frame we are going to draw the buffer canvas over the VNC scre
     cd proxy
     node index.js
 
-Теперь откройте урл: http://localhost:8090, и наслаждайтесь
+Теперь откройте урл: http://localhost:8090, и наслаждайтесь)
 
 
  [1]: img/yeoman-vnc-angular.png
