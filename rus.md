@@ -1077,6 +1077,9 @@ bufferCanvas поверх Screen.
 
 Теперь откройте урл: `http://localhost:8090`, и наслаждайтесь)
 
+## Демонстрация
+
+<iframe style="display: block; margin: auto;" width="450" height="345" src="//www.youtube.com/embed/FwPjTt4dQmw?theme=light" frameborder="0" allowfullscreen=""></iframe>
 
  [1]: img/yeoman-vnc-angular.png
  [2]: http://angularjs.org/
