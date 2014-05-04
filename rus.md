@@ -1,4 +1,4 @@
-# Создание клиента для удаленного доступа(VNC) на Yeoman и AngularJS#
+# Создание клиента для удаленного доступа (VNC) на Yeoman и AngularJS#
 
 ![yeoman-vnc-angular][1]
 
